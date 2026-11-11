@@ -105,6 +105,8 @@ textarea{resize:vertical;min-height:60px}
 .paytoggle{display:flex;gap:8px;margin-top:4px}
 .paytoggle button{flex:1;padding:10px;border-radius:6px;border:2px solid var(--line);background:none;color:var(--muted);font:700 1.05rem "Barlow Condensed",sans-serif;cursor:pointer}
 .paytoggle button.on.p{border-color:var(--pend);color:var(--pend);background:var(--pend-bg)}
+[hidden]{display:none !important}
+.paytoggle button.on.t{border-color:var(--ink);color:var(--ink);background:var(--paper)}
 .paytoggle button.on.d{border-color:var(--paid);color:var(--paid);background:var(--paid-bg)}
 .actions{display:flex;gap:10px;justify-content:space-between;margin-top:20px;flex-wrap:wrap}
 .actions .right{display:flex;gap:10px;margin-left:auto}
@@ -157,7 +159,7 @@ textarea{resize:vertical;min-height:60px}
 
   <div class="sheet">
     <table>
-      <thead><tr><th>Número de guía</th><th>Producto</th><th>Destino</th><th>Fecha de envío</th><th>Fecha de entrega</th><th>Venta</th><th>Costo</th><th>Ganancia</th><th>Pago</th></tr></thead>
+      <thead><tr><th>Guía / tipo</th><th>Producto</th><th>Destino</th><th>Fecha de envío</th><th>Fecha de entrega</th><th>Venta</th><th>Costo</th><th>Ganancia</th><th>Pago</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden></div>
@@ -180,9 +182,15 @@ textarea{resize:vertical;min-height:60px}
   <form class="dlg" id="form" method="dialog" novalidate>
     <h2 id="dlgTitle">Nuevo envío</h2>
     <div class="grid">
-      <label class="full">Número de guía<input name="guia" required autocomplete="off"></label>
+      <div class="full"><label as="span">Tipo de envío</label>
+        <div class="paytoggle" role="group" aria-label="Tipo de envío">
+          <button type="button" class="t" data-tipo="transportadora">Transportadora</button>
+          <button type="button" class="t" data-tipo="local">Mensajería local</button>
+        </div>
+      </div>
+      <label class="full" id="lblGuia">Número de guía<input name="guia" autocomplete="off"></label>
       <label class="full">Producto enviado<input name="producto" autocomplete="off" placeholder="Ej.: kit de arrastre, pastillas de freno"></label>
-      <label>Transportadora<input name="transportadora" autocomplete="off" placeholder="Opcional"></label>
+      <label><span id="lblTrans">Transportadora</span><input name="transportadora" autocomplete="off" placeholder="Opcional"></label>
       <label>Destino<input name="destino" required autocomplete="off" placeholder="Ciudad o cliente"></label>
       <label>Fecha de envío<input name="fechaEnvio" type="date" required></label>
       <label>Fecha de entrega<input name="fechaEntrega" type="date"></label>
@@ -226,6 +234,8 @@ textarea{resize:vertical;min-height:60px}
   const money = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
   const fmtDate = d => { if(!d) return ''; const [y,m,dd]=d.split('-'); return new Date(+y,m-1,+dd).toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); };
   const parseVal = v => { const n = Number(String(v||'').replace(/[^\d]/g,'')); return n>0?n:null; };
+  const esLocal = e => e.tipo==='local';
+  const nombre = e => esLocal(e) ? 'Envío local a '+e.destino : 'Guía '+e.guia;
   const profit = e => (e.valor!=null && e.costo!=null) ? e.valor - e.costo : null;
   const today = () => { const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); };
 
@@ -284,8 +294,8 @@ textarea{resize:vertical;min-height:60px}
         '<td class="c-cost num"></td>'+
         '<td class="c-gan num"></td>'+
         '<td class="c-estado"><button class="stamp '+(paid?'paid':'pend')+'" type="button"></button></td>';
-      tr.querySelector('.guia').textContent=e.guia;
-      tr.querySelector('.sub').textContent=e.transportadora||'';
+      tr.querySelector('.guia').textContent = esLocal(e) ? 'Mensajería local' : e.guia;
+      tr.querySelector('.sub').textContent = esLocal(e) ? (e.transportadora ? 'Mensajero: '+e.transportadora : '') : (e.transportadora||'');
       tr.querySelector('.c-dest').textContent=e.destino;
       tr.querySelector('.c-env').textContent=fmtDate(e.fechaEnvio);
       const ent=tr.querySelector('.c-ent');
@@ -320,7 +330,7 @@ textarea{resize:vertical;min-height:60px}
     const e=envios.find(x=>x.id===id); if(!e) return;
     const rec={...e, pago: e.pago==='pagado'?'pendiente':'pagado', actualizado:Date.now()};
     if(rec.pago==='pagado') rec.fechaPago=today(); else delete rec.fechaPago;
-    try{ await saveRecord(rec); toast(rec.pago==='pagado'?'Guía '+e.guia+' marcada como pagada':'Guía '+e.guia+' marcada como pendiente'); }
+    try{ await saveRecord(rec); toast(nombre(e)+(rec.pago==='pagado'?' marcado como pagado':' marcado como pendiente')); }
     catch(err){ toast('No se pudo guardar el cambio. Revisa tu conexión.'); }
   }
 
@@ -336,6 +346,15 @@ textarea{resize:vertical;min-height:60px}
   form.valor.addEventListener('input',updateCalc);
   form.costo.addEventListener('input',updateCalc);
 
+  let tipoState='transportadora';
+  function setTipo(v){
+    tipoState=v;
+    form.querySelectorAll('[data-tipo]').forEach(b=>{ const on=b.dataset.tipo===v; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
+    $('#lblGuia').hidden = v==='local';
+    $('#lblTrans').textContent = v==='local' ? 'Mensajero' : 'Transportadora';
+  }
+  form.querySelectorAll('[data-tipo]').forEach(b=>b.addEventListener('click',()=>setTipo(b.dataset.tipo)));
+
   function openDlg(id){
     editingId=id; form.reset(); $('#err').textContent='';
     const e = id? envios.find(x=>x.id===id):null;
@@ -346,23 +365,23 @@ textarea{resize:vertical;min-height:60px}
       form.fechaEnvio.value=e.fechaEnvio||''; form.fechaEntrega.value=e.fechaEntrega||'';
       form.valor.value=e.valor?String(e.valor):''; form.notas.value=e.notas||''; setPay(e.pago||'pendiente');
       form.producto.value=e.producto||''; form.costo.value=e.costo?String(e.costo):'';
-      form.devolucion.value=e.devolucion||'';
-    } else { form.fechaEnvio.value=today(); setPay('pendiente'); }
-    updateCalc(); dlg.showModal(); setTimeout(()=>form.guia.focus(),30);
+      form.devolucion.value=e.devolucion||''; setTipo(e.tipo||'transportadora');
+    } else { form.fechaEnvio.value=today(); setPay('pendiente'); setTipo('transportadora'); }
+    updateCalc(); dlg.showModal(); setTimeout(()=>(tipoState==='local'?form.destino:form.guia).focus(),30);
   }
 
   form.addEventListener('submit', async ev=>{
     ev.preventDefault();
-    const guia=form.guia.value.trim(), destino=form.destino.value.trim(), fe=form.fechaEnvio.value, fen=form.fechaEntrega.value;
+    const guia= tipoState==='local' ? '' : form.guia.value.trim(), destino=form.destino.value.trim(), fe=form.fechaEnvio.value, fen=form.fechaEntrega.value;
     if(!guia){ $('#err').textContent='Escribe el número de guía.'; form.guia.focus(); return; }
     if(!destino){ $('#err').textContent='Escribe el destino.'; form.destino.focus(); return; }
     if(!fe){ $('#err').textContent='Elige la fecha de envío.'; form.fechaEnvio.focus(); return; }
     if(fen && fen<fe){ $('#err').textContent='La fecha de entrega no puede ser anterior a la de envío.'; form.fechaEntrega.focus(); return; }
-    const dup=envios.find(x=>x.guia.toLowerCase()===guia.toLowerCase() && x.id!==editingId);
+    const dup= guia && envios.find(x=>(x.guia||'').toLowerCase()===guia.toLowerCase() && x.id!==editingId);
     if(dup){ $('#err').textContent='Ya existe un envío con la guía '+guia+'.'; form.guia.focus(); return; }
     const prev = editingId? envios.find(x=>x.id===editingId):null;
     const rec={
-      id: editingId||newId(), guia, destino,
+      id: editingId||newId(), tipo: tipoState, guia, destino,
       transportadora: form.transportadora.value.trim(),
       fechaEnvio: fe, fechaEntrega: fen||'',
       valor: parseVal(form.valor.value), notas: form.notas.value.trim(),
@@ -380,7 +399,7 @@ textarea{resize:vertical;min-height:60px}
   $('#cancelBtn').onclick=()=>dlg.close();
   $('#delBtn').onclick=async()=>{
     const e=envios.find(x=>x.id===editingId); if(!e) return;
-    if(!confirm('¿Eliminar el envío con guía '+e.guia+'? Esta acción no se puede deshacer.')) return;
+    if(!confirm('¿Eliminar este envío ('+nombre(e)+')? Esta acción no se puede deshacer.')) return;
     try{ await deleteRecord(e.id); dlg.close(); toast('Envío eliminado'); }
     catch(err){ $('#err').textContent='No se pudo eliminar. Inténtalo de nuevo.'; }
   };
@@ -408,8 +427,8 @@ textarea{resize:vertical;min-height:60px}
   const stamp=()=>today();
   $('#csvBtn').onclick=()=>{
     const esc=v=>{ const t=String(v??''); return /[";\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
-    const head=['Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
-    const lines=[head.join(';')].concat(envios.map(e=>[e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',e.pago==='pagado'?'Pagado':'Pendiente',(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
+    const head=['Tipo','Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
+    const lines=[head.join(';')].concat(envios.map(e=>[esLocal(e)?'Mensajería local':'Transportadora',e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',e.pago==='pagado'?'Pagado':'Pendiente',(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
     saveFile('envios-'+stamp()+'.csv','\ufeff'+lines.join('\r\n'),'text/csv');
   };
   $('#jsonBtn').onclick=()=>saveFile('respaldo-envios-'+stamp()+'.json',JSON.stringify({app:'control-envios',version:1,envios},null,2),'application/json');
@@ -419,10 +438,10 @@ textarea{resize:vertical;min-height:60px}
     let data; try{ data=JSON.parse(await f.text()); }catch(e){ toast('El archivo no es un respaldo válido.'); return; }
     const list=Array.isArray(data)?data:data.envios;
     if(!Array.isArray(list)){ toast('El archivo no es un respaldo válido.'); return; }
-    const nuevos=list.filter(r=>r&&r.guia&&!envios.some(e=>e.guia.toLowerCase()===String(r.guia).toLowerCase()));
+    const nuevos=list.filter(r=>r && (r.guia || r.tipo==='local') && !envios.some(e=>e.id===r.id || (r.guia && (e.guia||'').toLowerCase()===String(r.guia).toLowerCase())));
     if(!nuevos.length){ toast('Todos los envíos del respaldo ya están en la lista.'); return; }
     if(!confirm('Se agregarán '+nuevos.length+' envíos del respaldo. Los que ya existen no se tocan. ¿Continuar?')) return;
-    const CAMPOS=['guia','producto','transportadora','destino','fechaEnvio','fechaEntrega','valor','costo','pago','fechaPago','devolucion','notas','creado','actualizado'];
+    const CAMPOS=['tipo','guia','producto','transportadora','destino','fechaEnvio','fechaEntrega','valor','costo','pago','fechaPago','devolucion','notas','creado','actualizado'];
     const NUM=['valor','costo','creado','actualizado'];
     let ok=0; const fallos=[];
     for(const r of nuevos){
@@ -434,7 +453,7 @@ textarea{resize:vertical;min-height:60px}
       });
       if(!rec.pago) rec.pago='pendiente';
       try{ await saveRecord(rec); ok++; }
-      catch(e){ fallos.push('Guía '+rec.guia+': '+(e && (e.code||e.message) || 'error desconocido')); }
+      catch(e){ fallos.push(nombre(rec)+': '+(e && (e.code||e.message) || 'error desconocido')); }
     }
     toast(ok===1?'1 envío restaurado':ok+' envíos restaurados');
     if(fallos.length) alert('No se pudieron restaurar '+fallos.length+' envíos:\n\n'+fallos.join('\n'));

@@ -71,6 +71,15 @@ tbody tr:hover{background:color-mix(in srgb,var(--paper) 60%,transparent)}
 .stamp{display:inline-block;font:700 1rem/1 "Barlow Condensed","Arial Narrow",sans-serif;padding:6px 10px;border:2px solid currentColor;border-radius:4px;transform:rotate(-3deg);background:none;cursor:pointer;white-space:nowrap}
 .stamp.pend{color:var(--pend);background:var(--pend-bg)}
 .stamp.paid{color:var(--paid);background:var(--paid-bg);transform:rotate(2deg)}
+.stamp.dev{color:var(--muted);background:var(--paper);transform:rotate(-1deg)}
+.paytoggle button.on.v{border-color:var(--muted);color:var(--ink);background:var(--paper)}
+.seccion{margin-top:28px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 18px;margin-bottom:10px}
+.sec-head h2{font:700 1.7rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0}
+.sec-bal{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.95rem;color:var(--muted)}
+.sec-bal b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.sec-bal .g b{color:var(--paid)}
+.sec-empty{padding:18px 14px;color:var(--muted);font-size:.95rem}
 .empty{padding:48px 20px;text-align:center;color:var(--muted)}
 .empty p{margin:0 0 14px}
 .note{font-size:.85rem;color:var(--muted);margin-top:12px}
@@ -139,10 +148,8 @@ textarea{resize:vertical;min-height:60px}
   <header class="head">
     <h1>Envíos y pagos</h1>
     <div class="summary" aria-live="polite">
-      <div class="sum pend"><b id="sPend">$0</b><span id="sPendN">0 envíos por cobrar</span></div>
-      <div class="sum"><b id="sPaid">$0</b><span id="sPaidN">0 pagados</span></div>
-      <div class="sum gain"><b id="sGan">$0</b><span id="sGanN">ganancia total</span></div>
-      <div class="sum"><b id="sDev">0</b><span>devoluciones</span></div>
+      <div class="sum"><b id="sCob">$0</b><span>cobrado en total</span></div>
+      <div class="sum gain"><b id="sGan">$0</b><span>ganancia cobrada</span></div>
     </div>
   </header>
 
@@ -157,14 +164,9 @@ textarea{resize:vertical;min-height:60px}
     <button class="btn" id="addBtn">Nuevo envío</button>
   </div>
 
-  <div class="sheet">
-    <table>
-      <thead><tr><th>Guía / tipo</th><th>Producto</th><th>Destino</th><th>Fecha de envío</th><th>Fecha de entrega</th><th>Venta</th><th>Costo</th><th>Ganancia</th><th>Pago</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div class="empty" id="empty" hidden></div>
-  </div>
-  <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente y pagado.</p>
+  <div id="secciones"></div>
+  <div class="sheet empty" id="empty" hidden></div>
+  <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente, pagado y devuelto.</p>
   <div class="syncbar">
     <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
     <div class="syncbtns">
@@ -201,6 +203,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="paytoggle" role="group" aria-label="Estado de pago">
           <button type="button" class="p" data-pay="pendiente">Pendiente de pago</button>
           <button type="button" class="d" data-pay="pagado">Pagado</button>
+          <button type="button" class="v" data-pay="devuelto">Devuelto</button>
         </div>
       </div>
       <label class="full">Devolución por no reclamo<select name="devolucion"><option value="">Sin devolución</option><option value="pendiente">Pendiente de devolución</option><option value="medellin">Llegó a Medellín</option></select></label>
@@ -261,76 +264,113 @@ textarea{resize:vertical;min-height:60px}
   const newId = () => 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
   // ---------- render ----------
+  const ESTADOS={ pendiente:{txt:'Pendiente',cls:'pend'}, pagado:{txt:'Pagado',cls:'paid'}, devuelto:{txt:'Devuelto',cls:'dev'} };
+  const estado = e => ESTADOS[e.pago] ? e.pago : 'pendiente';
+  const cuenta = e => estado(e)==='pagado' && !e.devolucion;   // solo lo pagado suma al balance
+  const esDevuelto = e => estado(e)==='devuelto' || !!e.devolucion;
+
+  function balance(lista){
+    let cob=0, gan=0, pend=0, pag=0, dev=0;
+    lista.forEach(e=>{
+      if(esDevuelto(e)){ dev++; return; }
+      if(cuenta(e)){ pag++; cob+=e.valor||0; const g=profit(e); if(g!==null) gan+=g; }
+      else pend++;
+    });
+    return {cob,gan,pend,pag,dev};
+  }
+  const plural=(n,a,b)=>n+' '+(n===1?a:b);
+
+  function filaEnvio(e){
+    const tr=document.createElement('tr'); tr.tabIndex=0; tr.dataset.id=e.id;
+    const est=ESTADOS[estado(e)];
+    tr.innerHTML =
+      '<td class="c-guia"><span class="guia"></span><span class="sub"></span></td>'+
+      '<td class="c-prod"></td>'+
+      '<td class="c-dest"></td>'+
+      '<td class="c-env num"></td>'+
+      '<td class="c-ent num"></td>'+
+      '<td class="c-val num"></td>'+
+      '<td class="c-cost num"></td>'+
+      '<td class="c-gan num"></td>'+
+      '<td class="c-estado"><button class="stamp '+est.cls+'" type="button"></button></td>';
+    if(esLocal(e)){ tr.querySelector('.guia').textContent = e.transportadora || 'Sin mensajero'; }
+    else { tr.querySelector('.guia').textContent = e.guia; tr.querySelector('.sub').textContent = e.transportadora||''; }
+    tr.querySelector('.c-dest').textContent=e.destino;
+    tr.querySelector('.c-env').textContent=fmtDate(e.fechaEnvio);
+    const ent=tr.querySelector('.c-ent');
+    if(e.devolucion){ ent.classList.add('is-ret'); const r=document.createElement('span'); r.className='ret '+(e.devolucion==='medellin'?'done':'pend'); r.textContent=e.devolucion==='medellin'?'Devuelto, llegó a Medellín':'Devolución pendiente'; ent.appendChild(r); }
+    else if(e.fechaEntrega) ent.textContent=fmtDate(e.fechaEntrega);
+    else if(estado(e)==='devuelto') ent.textContent='';
+    else { ent.innerHTML='<span class="transit">En tránsito</span>'; }
+    tr.querySelector('.c-val').textContent = e.valor? money.format(e.valor):'';
+    tr.querySelector('.c-prod').textContent = e.producto||'';
+    tr.querySelector('.c-cost').textContent = e.costo? money.format(e.costo):'';
+    const g=esDevuelto(e)?null:profit(e), gc=tr.querySelector('.c-gan');
+    if(g!==null){ const sp=document.createElement('span'); sp.className='gan'+(g<0?' neg':''); sp.textContent=money.format(g); gc.appendChild(sp); }
+    const st=tr.querySelector('.stamp');
+    st.textContent = est.txt;
+    st.setAttribute('aria-label', est.txt+'. Cambiar estado');
+    st.addEventListener('click',ev=>{ev.stopPropagation(); togglePay(e.id);});
+    tr.addEventListener('click',()=>openDlg(e.id));
+    tr.addEventListener('keydown',ev=>{ if(ev.key==='Enter'&&ev.target===tr) openDlg(e.id); });
+    return tr;
+  }
+
   function render(){
-    let pendSum=0,pendN=0,paidSum=0,paidN=0;
-    let devN=0;
-    envios.forEach(e=>{ if(e.devolucion){devN++; return;} if(e.pago==='pagado'){paidN++;paidSum+=e.valor||0;} else {pendN++;pendSum+=e.valor||0;} });
-    $('#sPend').textContent = money.format(pendSum);
-    $('#sPendN').textContent = pendN===1?'1 envío por cobrar':pendN+' envíos por cobrar';
-    $('#sPaid').textContent = money.format(paidSum);
-    $('#sPaidN').textContent = paidN===1?'1 pagado':paidN+' pagados';
-    $('#sDev').textContent = devN;
-    let gan=0,ganC=0; envios.forEach(e=>{ const g=e.devolucion?null:profit(e); if(g!==null){ gan+=g; if(e.pago==='pagado') ganC+=g; } });
-    $('#sGan').textContent = money.format(gan);
-    $('#sGanN').textContent = 'ganancia total, '+money.format(ganC)+' ya cobrada';
+    const total=balance(envios);
+    $('#sCob').textContent = money.format(total.cob);
+    $('#sGan').textContent = money.format(total.gan);
 
     const q = query.trim().toLowerCase();
     const list = envios
-      .filter(e => filter==='all' || (filter==='dev' ? !!e.devolucion : filter==='paid' ? (e.pago==='pagado' && !e.devolucion) : (e.pago!=='pagado' && !e.devolucion)))
+      .filter(e => filter==='all' || (filter==='dev' ? esDevuelto(e) : filter==='paid' ? cuenta(e) : (estado(e)==='pendiente' && !e.devolucion)))
       .filter(e => !q || [e.guia,e.producto,e.destino,e.transportadora,e.notas].some(x=>String(x||'').toLowerCase().includes(q)))
       .sort((a,b)=> (b.fechaEnvio||'').localeCompare(a.fechaEnvio||'') || (b.creado||0)-(a.creado||0));
 
-    rowsEl.textContent='';
-    list.forEach(e=>{
-      const tr=document.createElement('tr'); tr.tabIndex=0; tr.dataset.id=e.id;
-      const paid=e.pago==='pagado';
-      tr.innerHTML =
-        '<td class="c-guia"><span class="guia"></span><span class="sub"></span></td>'+
-        '<td class="c-prod"></td>'+
-        '<td class="c-dest"></td>'+
-        '<td class="c-env num"></td>'+
-        '<td class="c-ent num"></td>'+
-        '<td class="c-val num"></td>'+
-        '<td class="c-cost num"></td>'+
-        '<td class="c-gan num"></td>'+
-        '<td class="c-estado"><button class="stamp '+(paid?'paid':'pend')+'" type="button"></button></td>';
-      tr.querySelector('.guia').textContent = esLocal(e) ? 'Mensajería local' : e.guia;
-      tr.querySelector('.sub').textContent = esLocal(e) ? (e.transportadora ? 'Mensajero: '+e.transportadora : '') : (e.transportadora||'');
-      tr.querySelector('.c-dest').textContent=e.destino;
-      tr.querySelector('.c-env').textContent=fmtDate(e.fechaEnvio);
-      const ent=tr.querySelector('.c-ent');
-      if(e.devolucion){ ent.classList.add('is-ret'); const r=document.createElement('span'); r.className='ret '+(e.devolucion==='medellin'?'done':'pend'); r.textContent=e.devolucion==='medellin'?'Devuelto, llegó a Medellín':'Devolución pendiente'; ent.appendChild(r); }
-      else if(e.fechaEntrega) ent.textContent=fmtDate(e.fechaEntrega);
-      else { ent.innerHTML='<span class="transit">En tránsito</span>'; }
-      tr.querySelector('.c-val').textContent = e.valor? money.format(e.valor):'';
-      tr.querySelector('.c-prod').textContent = e.producto||'';
-      tr.querySelector('.c-cost').textContent = e.costo? money.format(e.costo):'';
-      const g=e.devolucion?null:profit(e), gc=tr.querySelector('.c-gan');
-      if(g!==null){ const sp=document.createElement('span'); sp.className='gan'+(g<0?' neg':''); sp.textContent=money.format(g); gc.appendChild(sp); }
-      const st=tr.querySelector('.stamp');
-      st.textContent = paid?'Pagado':'Pendiente';
-      st.setAttribute('aria-label', (paid?'Pagado':'Pendiente de pago')+'. Cambiar estado');
-      st.addEventListener('click',ev=>{ev.stopPropagation(); togglePay(e.id);});
-      tr.addEventListener('click',()=>openDlg(e.id));
-      tr.addEventListener('keydown',ev=>{ if(ev.key==='Enter'&&ev.target===tr) openDlg(e.id); });
-      rowsEl.appendChild(tr);
-    });
-
+    const cont=$('#secciones'); cont.textContent='';
     if(!loaded){ emptyEl.hidden=false; emptyEl.innerHTML='<p>Cargando envíos…</p>'; return; }
-    if(list.length===0){
+    if(envios.length===0){
       emptyEl.hidden=false;
-      if(envios.length===0){
-        emptyEl.innerHTML='<p>Todavía no hay envíos. Registra el primero con su número de guía.</p><button class="btn" type="button">Nuevo envío</button>';
-        emptyEl.querySelector('button').onclick=()=>openDlg(null);
-      } else emptyEl.innerHTML='<p>Ningún envío coincide con la búsqueda o el filtro.</p>';
-    } else emptyEl.hidden=true;
+      emptyEl.innerHTML='<p>Todavía no hay envíos. Registra el primero.</p><button class="btn" type="button">Nuevo envío</button>';
+      emptyEl.querySelector('button').onclick=()=>openDlg(null);
+      return;
+    }
+    emptyEl.hidden=true;
+
+    [ {titulo:'Transportadora', col:'Guía', es:e=>!esLocal(e)},
+      {titulo:'Mensajería local', col:'Mensajero', es:esLocal} ].forEach(sec=>{
+      const todos=envios.filter(sec.es), filas=list.filter(sec.es), b=balance(todos);
+      const el=document.createElement('section'); el.className='seccion';
+      el.innerHTML =
+        '<div class="sec-head"><h2></h2><div class="sec-bal">'+
+          '<span>Cobrado <b class="b-cob"></b></span>'+
+          '<span class="g">Ganancia <b class="b-gan"></b></span>'+
+          '<span class="b-cnt"></span>'+
+        '</div></div>'+
+        '<div class="sheet"><table><thead><tr><th></th><th>Producto</th><th>Destino</th><th>Fecha de envío</th><th>Fecha de entrega</th><th>Venta</th><th>Costo</th><th>Ganancia</th><th>Pago</th></tr></thead><tbody></tbody></table></div>';
+      el.querySelector('h2').textContent=sec.titulo;
+      el.querySelector('th').textContent=sec.col;
+      el.querySelector('.b-cob').textContent=money.format(b.cob);
+      el.querySelector('.b-gan').textContent=money.format(b.gan);
+      el.querySelector('.b-cnt').textContent=[plural(b.pend,'pendiente','pendientes'),plural(b.pag,'pagado','pagados'),plural(b.dev,'devuelto','devueltos')].join(' · ');
+      const tb=el.querySelector('tbody');
+      filas.forEach(e=>tb.appendChild(filaEnvio(e)));
+      if(!filas.length){
+        el.querySelector('table').hidden=true;
+        const p=document.createElement('p'); p.className='sec-empty';
+        p.textContent = todos.length ? 'Ningún envío de esta sección coincide con la búsqueda o el filtro.' : 'Aún no hay envíos en esta sección.';
+        el.querySelector('.sheet').appendChild(p);
+      }
+      cont.appendChild(el);
+    });
   }
 
   async function togglePay(id){
     const e=envios.find(x=>x.id===id); if(!e) return;
-    const rec={...e, pago: e.pago==='pagado'?'pendiente':'pagado', actualizado:Date.now()};
-    if(rec.pago==='pagado') rec.fechaPago=today(); else delete rec.fechaPago;
-    try{ await saveRecord(rec); toast(nombre(e)+(rec.pago==='pagado'?' marcado como pagado':' marcado como pendiente')); }
+    const sig={pendiente:'pagado', pagado:'devuelto', devuelto:'pendiente'}[estado(e)];
+    const rec={...e, pago: sig, actualizado:Date.now()};
+    if(sig==='pagado') rec.fechaPago=today(); else delete rec.fechaPago;
+    try{ await saveRecord(rec); toast(nombre(e)+' marcado como '+ESTADOS[sig].txt.toLowerCase()); }
     catch(err){ toast('No se pudo guardar el cambio. Revisa tu conexión.'); }
   }
 
@@ -428,7 +468,7 @@ textarea{resize:vertical;min-height:60px}
   $('#csvBtn').onclick=()=>{
     const esc=v=>{ const t=String(v??''); return /[";\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
     const head=['Tipo','Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
-    const lines=[head.join(';')].concat(envios.map(e=>[esLocal(e)?'Mensajería local':'Transportadora',e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',e.pago==='pagado'?'Pagado':'Pendiente',(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
+    const lines=[head.join(';')].concat(envios.map(e=>[esLocal(e)?'Mensajería local':'Transportadora',e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',ESTADOS[estado(e)].txt,(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
     saveFile('envios-'+stamp()+'.csv','\ufeff'+lines.join('\r\n'),'text/csv');
   };
   $('#jsonBtn').onclick=()=>saveFile('respaldo-envios-'+stamp()+'.json',JSON.stringify({app:'control-envios',version:1,envios},null,2),'application/json');

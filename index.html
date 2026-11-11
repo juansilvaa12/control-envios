@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de envíos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF1F4; --sheet:#FFFFFF; --ink:#1E2A44; --muted:#5D6A80; --line:#D3D9E2;
+  --pend:#C8352E; --pend-bg:#FBECEA; --paid:#2E7D4F; --paid-bg:#E7F3EC; --tape:#F2C230; --tape-ink:#2A2200;
+  --transit:#8A6A00;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#141A24; --sheet:#1C2431; --ink:#E6EAF1; --muted:#9AA6B9; --line:#2E3A4C;
+    --pend:#F0766E; --pend-bg:#3A1E1D; --paid:#6CCB93; --paid-bg:#17322A; --tape:#E8B92A; --tape-ink:#1A1400;
+    --transit:#E3C25A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141A24; --sheet:#1C2431; --ink:#E6EAF1; --muted:#9AA6B9; --line:#2E3A4C;
+  --pend:#F0766E; --pend-bg:#3A1E1D; --paid:#6CCB93; --paid-bg:#17322A; --tape:#E8B92A; --tape-ink:#1A1400;
+  --transit:#E3C25A; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.5 "Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+h1{font:700 clamp(2.2rem,6vw,3.4rem)/1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0;letter-spacing:-.01em}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px;padding-bottom:20px;border-bottom:3px solid var(--ink)}
+.summary{display:flex;gap:28px;flex-wrap:wrap}
+.sum b{display:block;font:600 1.7rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.sum span{font-size:.9rem;color:var(--muted)}
+.sum.pend b{color:var(--pend)}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:20px 0 16px}
+.search{flex:1 1 220px;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--sheet);color:var(--ink);font:inherit}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--sheet)}
+.seg button{border:0;background:none;color:var(--muted);font:500 .95rem "Barlow",sans-serif;padding:9px 14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--sheet)}
+.btn{border:0;border-radius:6px;padding:10px 16px;font:600 1rem "Barlow",sans-serif;cursor:pointer;background:var(--tape);color:var(--tape-ink)}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:none;color:var(--pend);border:1px solid var(--pend)}
+:focus-visible{outline:2px solid var(--tape);outline-offset:2px}
+.sheet{background:var(--sheet);border:1px solid var(--line);border-radius:4px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:1000px}
+th{text-align:left;font:600 .85rem "Barlow",sans-serif;color:var(--muted);padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:14px;border-bottom:1px dashed var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:color-mix(in srgb,var(--paper) 60%,transparent)}
+.guia{font:600 1.15rem "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.sub{display:block;font-size:.85rem;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.transit{color:var(--transit);font-weight:500}
+.gan{font-weight:600;color:var(--paid)}
+.gan.neg{color:var(--pend)}
+.sum.gain b{color:var(--paid)}
+.calc{margin:0;font-weight:600;color:var(--paid)}
+.calc.neg{color:var(--pend)}
+.calc.muted{font-weight:400;color:var(--muted)}
+.ret{display:inline-block;font-weight:600;font-size:.9rem;padding:2px 8px;border-radius:4px;white-space:nowrap}
+.ret.pend{color:var(--transit);background:color-mix(in srgb,var(--tape) 22%,transparent)}
+.ret.done{color:var(--muted);background:var(--paper);border:1px solid var(--line)}
+.stamp{display:inline-block;font:700 1rem/1 "Barlow Condensed","Arial Narrow",sans-serif;padding:6px 10px;border:2px solid currentColor;border-radius:4px;transform:rotate(-3deg);background:none;cursor:pointer;white-space:nowrap}
+.stamp.pend{color:var(--pend);background:var(--pend-bg)}
+.stamp.paid{color:var(--paid);background:var(--paid-bg);transform:rotate(2deg)}
+.empty{padding:48px 20px;text-align:center;color:var(--muted)}
+.empty p{margin:0 0 14px}
+.note{font-size:.85rem;color:var(--muted);margin-top:12px}
+/* móvil: filas como tarjetas */
+@media (max-width:680px){
+  table{min-width:0}
+  thead{display:none}
+  tbody tr{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:14px;border-bottom:1px dashed var(--line)}
+  tbody tr:last-child{border-bottom:0}
+  td{padding:0;border:0}
+  td.c-guia{grid-column:1}
+  td.c-estado{grid-column:2;grid-row:1 / span 2;align-self:center}
+  td.c-dest,td.c-env,td.c-ent,td.c-val,td.c-cost,td.c-gan{grid-column:1;font-size:.95rem}
+  td.c-prod{grid-column:1;font-weight:500}
+  td.c-val::before{content:"Venta: ";color:var(--muted)}
+  td.c-cost::before{content:"Costo: ";color:var(--muted)}
+  td.c-gan::before{content:"Ganancia: ";color:var(--muted)}
+  td.c-ent.is-ret::before{content:none}
+  td.c-env::before{content:"Enviado: ";color:var(--muted)}
+  td.c-ent::before{content:"Entregado: ";color:var(--muted)}
+  td.c-val:empty,td.c-cost:empty,td.c-gan:empty,td.c-prod:empty{display:none}
+}
+dialog{border:0;border-radius:8px;padding:0;background:var(--sheet);color:var(--ink);width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 24px)}
+dialog::backdrop{background:rgba(10,15,25,.55)}
+.dlg{padding:22px}
+.dlg h2{font:700 1.7rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid .full{grid-column:1 / -1}
+label{display:block;font-size:.9rem;font-weight:500;color:var(--muted)}
+label input,label select,label textarea{display:block;width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font:400 1rem "Barlow",sans-serif}
+textarea{resize:vertical;min-height:60px}
+.paytoggle{display:flex;gap:8px;margin-top:4px}
+.paytoggle button{flex:1;padding:10px;border-radius:6px;border:2px solid var(--line);background:none;color:var(--muted);font:700 1.05rem "Barlow Condensed",sans-serif;cursor:pointer}
+.paytoggle button.on.p{border-color:var(--pend);color:var(--pend);background:var(--pend-bg)}
+.paytoggle button.on.d{border-color:var(--paid);color:var(--paid);background:var(--paid-bg)}
+.actions{display:flex;gap:10px;justify-content:space-between;margin-top:20px;flex-wrap:wrap}
+.actions .right{display:flex;gap:10px;margin-left:auto}
+.err{color:var(--pend);font-size:.9rem;margin-top:10px;min-height:1.2em}
+.syncbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+.sync{display:inline-flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.sync.cloud .dot{background:var(--paid)}
+.sync.local .dot{background:var(--transit)}
+.sync.off .dot{background:var(--pend)}
+.syncbtns{display:flex;gap:8px;flex-wrap:wrap}
+.btn.sm{padding:7px 12px;font-size:.9rem}
+.login{max-width:420px;margin:15vh auto 0;padding:28px 20px;text-align:center}
+.login p{color:var(--muted)}
+.who{font-size:.85rem;color:var(--muted);align-self:center}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--sheet);padding:10px 16px;border-radius:6px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@media (max-width:460px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <h1>Envíos y pagos</h1>
+  <p>Inicia sesión para ver y guardar tus envíos.</p>
+  <button class="btn" id="loginBtn" type="button">Iniciar sesión con Google</button>
+  <p class="err" id="loginErr" role="alert"></p>
+</div>
+<div class="wrap">
+  <header class="head">
+    <h1>Envíos y pagos</h1>
+    <div class="summary" aria-live="polite">
+      <div class="sum pend"><b id="sPend">$0</b><span id="sPendN">0 envíos por cobrar</span></div>
+      <div class="sum"><b id="sPaid">$0</b><span id="sPaidN">0 pagados</span></div>
+      <div class="sum gain"><b id="sGan">$0</b><span id="sGanN">ganancia total</span></div>
+      <div class="sum"><b id="sDev">0</b><span>devoluciones</span></div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="q" type="search" placeholder="Buscar guía, producto, destino o transportadora" aria-label="Buscar">
+    <div class="seg" role="group" aria-label="Filtrar por pago">
+      <button data-f="all" aria-pressed="true">Todos</button>
+      <button data-f="pend" aria-pressed="false">Pendientes</button>
+      <button data-f="paid" aria-pressed="false">Pagados</button>
+      <button data-f="dev" aria-pressed="false">Devoluciones</button>
+    </div>
+    <button class="btn" id="addBtn">Nuevo envío</button>
+  </div>
+
+  <div class="sheet">
+    <table>
+      <thead><tr><th>Número de guía</th><th>Producto</th><th>Destino</th><th>Fecha de envío</th><th>Fecha de entrega</th><th>Venta</th><th>Costo</th><th>Ganancia</th><th>Pago</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+  <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente y pagado.</p>
+  <div class="syncbar">
+    <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
+    <div class="syncbtns">
+      <button class="btn ghost sm" id="csvBtn" type="button" hidden>Descargar copia en Excel</button>
+      <button class="btn ghost sm" id="jsonBtn" type="button" hidden>Descargar respaldo</button>
+      <button class="btn ghost sm" id="impBtn" type="button" hidden>Restaurar respaldo</button>
+      <input type="file" id="impFile" accept=".json,application/json" hidden>
+      <span class="who" id="who"></span>
+      <button class="btn ghost sm" id="logoutBtn" type="button" hidden>Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" id="form" method="dialog" novalidate>
+    <h2 id="dlgTitle">Nuevo envío</h2>
+    <div class="grid">
+      <label class="full">Número de guía<input name="guia" required autocomplete="off"></label>
+      <label class="full">Producto enviado<input name="producto" autocomplete="off" placeholder="Ej.: kit de arrastre, pastillas de freno"></label>
+      <label>Transportadora<input name="transportadora" autocomplete="off" placeholder="Opcional"></label>
+      <label>Destino<input name="destino" required autocomplete="off" placeholder="Ciudad o cliente"></label>
+      <label>Fecha de envío<input name="fechaEnvio" type="date" required></label>
+      <label>Fecha de entrega<input name="fechaEntrega" type="date"></label>
+      <label>Precio de venta<input name="valor" inputmode="numeric" placeholder="Lo que cobras" autocomplete="off"></label>
+      <label>Costo del producto<input name="costo" inputmode="numeric" placeholder="Lo que te costó" autocomplete="off"></label>
+      <p class="full calc muted" id="calc"></p>
+      <div class="full"><label as="span">Pago</label>
+        <div class="paytoggle" role="group" aria-label="Estado de pago">
+          <button type="button" class="p" data-pay="pendiente">Pendiente de pago</button>
+          <button type="button" class="d" data-pay="pagado">Pagado</button>
+        </div>
+      </div>
+      <label class="full">Devolución por no reclamo<select name="devolucion"><option value="">Sin devolución</option><option value="pendiente">Pendiente de devolución</option><option value="medellin">Llegó a Medellín</option></select></label>
+      <label class="full">Notas<textarea name="notas" placeholder="Opcional"></textarea></label>
+    </div>
+    <div class="err" id="err" role="alert"></div>
+    <div class="actions">
+      <button type="button" class="btn danger" id="delBtn" hidden>Eliminar</button>
+      <div class="right">
+        <button type="button" class="btn ghost" id="cancelBtn">Cancelar</button>
+        <button type="submit" class="btn" id="saveBtn">Guardar envío</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const rowsEl = $('#rows'), emptyEl = $('#empty'), dlg = $('#dlg'), form = $('#form');
+  let envios = [];       // [{id, ...}]
+  let filter = 'all', query = '';
+  let editingId = null, payState = 'pendiente';
+  let db = null, col = null, loaded = false;
+  const LS = 'control-envios-v1';
+
+  const money = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
+  const fmtDate = d => { if(!d) return ''; const [y,m,dd]=d.split('-'); return new Date(+y,m-1,+dd).toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); };
+  const parseVal = v => { const n = Number(String(v||'').replace(/[^\d]/g,'')); return n>0?n:null; };
+  const profit = e => (e.valor!=null && e.costo!=null) ? e.valor - e.costo : null;
+  const today = () => { const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); };
+
+  function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
+
+  // ---------- almacenamiento ----------
+  function lsLoad(){ try{ envios = JSON.parse(localStorage.getItem(LS)||'[]'); }catch(e){ envios=[]; } }
+  function lsSave(){ try{ localStorage.setItem(LS, JSON.stringify(envios)); }catch(e){} }
+
+  // Si la nube no confirma en 15 s, se avisa en vez de dejar el botón colgado
+  const conLimite = p => Promise.race([p, new Promise((_,rej)=>setTimeout(()=>{
+    setSync('off','La nube no confirma los cambios. Revisa que la base de datos de Firestore esté creada y las reglas publicadas.');
+    rej({code:'sin-respuesta-de-la-nube'});
+  },15000))]);
+  async function saveRecord(rec){
+    if(col){ const {id, ...body} = rec; await conLimite(col.doc(id).set(body)); }
+    else { const i=envios.findIndex(e=>e.id===rec.id); if(i>=0) envios[i]=rec; else envios.push(rec); lsSave(); render(); }
+  }
+  async function deleteRecord(id){
+    if(col){ await conLimite(col.doc(id).delete()); }
+    else { envios = envios.filter(e=>e.id!==id); lsSave(); render(); }
+  }
+  const newId = () => 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+  // ---------- render ----------
+  function render(){
+    let pendSum=0,pendN=0,paidSum=0,paidN=0;
+    let devN=0;
+    envios.forEach(e=>{ if(e.devolucion){devN++; return;} if(e.pago==='pagado'){paidN++;paidSum+=e.valor||0;} else {pendN++;pendSum+=e.valor||0;} });
+    $('#sPend').textContent = money.format(pendSum);
+    $('#sPendN').textContent = pendN===1?'1 envío por cobrar':pendN+' envíos por cobrar';
+    $('#sPaid').textContent = money.format(paidSum);
+    $('#sPaidN').textContent = paidN===1?'1 pagado':paidN+' pagados';
+    $('#sDev').textContent = devN;
+    let gan=0,ganC=0; envios.forEach(e=>{ const g=e.devolucion?null:profit(e); if(g!==null){ gan+=g; if(e.pago==='pagado') ganC+=g; } });
+    $('#sGan').textContent = money.format(gan);
+    $('#sGanN').textContent = 'ganancia total, '+money.format(ganC)+' ya cobrada';
+
+    const q = query.trim().toLowerCase();
+    const list = envios
+      .filter(e => filter==='all' || (filter==='dev' ? !!e.devolucion : filter==='paid' ? (e.pago==='pagado' && !e.devolucion) : (e.pago!=='pagado' && !e.devolucion)))
+      .filter(e => !q || [e.guia,e.producto,e.destino,e.transportadora,e.notas].some(x=>String(x||'').toLowerCase().includes(q)))
+      .sort((a,b)=> (b.fechaEnvio||'').localeCompare(a.fechaEnvio||'') || (b.creado||0)-(a.creado||0));
+
+    rowsEl.textContent='';
+    list.forEach(e=>{
+      const tr=document.createElement('tr'); tr.tabIndex=0; tr.dataset.id=e.id;
+      const paid=e.pago==='pagado';
+      tr.innerHTML =
+        '<td class="c-guia"><span class="guia"></span><span class="sub"></span></td>'+
+        '<td class="c-prod"></td>'+
+        '<td class="c-dest"></td>'+
+        '<td class="c-env num"></td>'+
+        '<td class="c-ent num"></td>'+
+        '<td class="c-val num"></td>'+
+        '<td class="c-cost num"></td>'+
+        '<td class="c-gan num"></td>'+
+        '<td class="c-estado"><button class="stamp '+(paid?'paid':'pend')+'" type="button"></button></td>';
+      tr.querySelector('.guia').textContent=e.guia;
+      tr.querySelector('.sub').textContent=e.transportadora||'';
+      tr.querySelector('.c-dest').textContent=e.destino;
+      tr.querySelector('.c-env').textContent=fmtDate(e.fechaEnvio);
+      const ent=tr.querySelector('.c-ent');
+      if(e.devolucion){ ent.classList.add('is-ret'); const r=document.createElement('span'); r.className='ret '+(e.devolucion==='medellin'?'done':'pend'); r.textContent=e.devolucion==='medellin'?'Devuelto, llegó a Medellín':'Devolución pendiente'; ent.appendChild(r); }
+      else if(e.fechaEntrega) ent.textContent=fmtDate(e.fechaEntrega);
+      else { ent.innerHTML='<span class="transit">En tránsito</span>'; }
+      tr.querySelector('.c-val').textContent = e.valor? money.format(e.valor):'';
+      tr.querySelector('.c-prod').textContent = e.producto||'';
+      tr.querySelector('.c-cost').textContent = e.costo? money.format(e.costo):'';
+      const g=e.devolucion?null:profit(e), gc=tr.querySelector('.c-gan');
+      if(g!==null){ const sp=document.createElement('span'); sp.className='gan'+(g<0?' neg':''); sp.textContent=money.format(g); gc.appendChild(sp); }
+      const st=tr.querySelector('.stamp');
+      st.textContent = paid?'Pagado':'Pendiente';
+      st.setAttribute('aria-label', (paid?'Pagado':'Pendiente de pago')+'. Cambiar estado');
+      st.addEventListener('click',ev=>{ev.stopPropagation(); togglePay(e.id);});
+      tr.addEventListener('click',()=>openDlg(e.id));
+      tr.addEventListener('keydown',ev=>{ if(ev.key==='Enter'&&ev.target===tr) openDlg(e.id); });
+      rowsEl.appendChild(tr);
+    });
+
+    if(!loaded){ emptyEl.hidden=false; emptyEl.innerHTML='<p>Cargando envíos…</p>'; return; }
+    if(list.length===0){
+      emptyEl.hidden=false;
+      if(envios.length===0){
+        emptyEl.innerHTML='<p>Todavía no hay envíos. Registra el primero con su número de guía.</p><button class="btn" type="button">Nuevo envío</button>';
+        emptyEl.querySelector('button').onclick=()=>openDlg(null);
+      } else emptyEl.innerHTML='<p>Ningún envío coincide con la búsqueda o el filtro.</p>';
+    } else emptyEl.hidden=true;
+  }
+
+  async function togglePay(id){
+    const e=envios.find(x=>x.id===id); if(!e) return;
+    const rec={...e, pago: e.pago==='pagado'?'pendiente':'pagado', actualizado:Date.now()};
+    if(rec.pago==='pagado') rec.fechaPago=today(); else delete rec.fechaPago;
+    try{ await saveRecord(rec); toast(rec.pago==='pagado'?'Guía '+e.guia+' marcada como pagada':'Guía '+e.guia+' marcada como pendiente'); }
+    catch(err){ toast('No se pudo guardar el cambio. Revisa tu conexión.'); }
+  }
+
+  // ---------- diálogo ----------
+  function setPay(v){ payState=v; form.querySelectorAll('[data-pay]').forEach(b=>{ const on=b.dataset.pay===v; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); }); }
+  form.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>setPay(b.dataset.pay)));
+
+  function updateCalc(){
+    const v=parseVal(form.valor.value), c=parseVal(form.costo.value), el=$('#calc');
+    if(v!=null && c!=null){ const g=v-c; el.textContent='Ganancia de este envío: '+money.format(g)+' ('+Math.round(g/v*100)+'% de la venta)'; el.className='full calc'+(g<0?' neg':''); }
+    else { el.textContent='Escribe el precio de venta y el costo para ver la ganancia.'; el.className='full calc muted'; }
+  }
+  form.valor.addEventListener('input',updateCalc);
+  form.costo.addEventListener('input',updateCalc);
+
+  function openDlg(id){
+    editingId=id; form.reset(); $('#err').textContent='';
+    const e = id? envios.find(x=>x.id===id):null;
+    $('#dlgTitle').textContent = e?'Editar envío':'Nuevo envío';
+    $('#delBtn').hidden = !e;
+    if(e){
+      form.guia.value=e.guia||''; form.transportadora.value=e.transportadora||''; form.destino.value=e.destino||'';
+      form.fechaEnvio.value=e.fechaEnvio||''; form.fechaEntrega.value=e.fechaEntrega||'';
+      form.valor.value=e.valor?String(e.valor):''; form.notas.value=e.notas||''; setPay(e.pago||'pendiente');
+      form.producto.value=e.producto||''; form.costo.value=e.costo?String(e.costo):'';
+      form.devolucion.value=e.devolucion||'';
+    } else { form.fechaEnvio.value=today(); setPay('pendiente'); }
+    updateCalc(); dlg.showModal(); setTimeout(()=>form.guia.focus(),30);
+  }
+
+  form.addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const guia=form.guia.value.trim(), destino=form.destino.value.trim(), fe=form.fechaEnvio.value, fen=form.fechaEntrega.value;
+    if(!guia){ $('#err').textContent='Escribe el número de guía.'; form.guia.focus(); return; }
+    if(!destino){ $('#err').textContent='Escribe el destino.'; form.destino.focus(); return; }
+    if(!fe){ $('#err').textContent='Elige la fecha de envío.'; form.fechaEnvio.focus(); return; }
+    if(fen && fen<fe){ $('#err').textContent='La fecha de entrega no puede ser anterior a la de envío.'; form.fechaEntrega.focus(); return; }
+    const dup=envios.find(x=>x.guia.toLowerCase()===guia.toLowerCase() && x.id!==editingId);
+    if(dup){ $('#err').textContent='Ya existe un envío con la guía '+guia+'.'; form.guia.focus(); return; }
+    const prev = editingId? envios.find(x=>x.id===editingId):null;
+    const rec={
+      id: editingId||newId(), guia, destino,
+      transportadora: form.transportadora.value.trim(),
+      fechaEnvio: fe, fechaEntrega: fen||'',
+      valor: parseVal(form.valor.value), notas: form.notas.value.trim(),
+      producto: form.producto.value.trim(), costo: parseVal(form.costo.value),
+      devolucion: form.devolucion.value,
+      pago: payState, creado: prev?.creado||Date.now(), actualizado: Date.now()
+    };
+    if(payState==='pagado') rec.fechaPago = prev?.fechaPago || today();
+    $('#saveBtn').disabled=true;
+    try{ await saveRecord(rec); dlg.close(); toast(prev?'Envío actualizado':'Envío guardado'); }
+    catch(err){ $('#err').textContent='No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.'; }
+    finally{ $('#saveBtn').disabled=false; }
+  });
+
+  $('#cancelBtn').onclick=()=>dlg.close();
+  $('#delBtn').onclick=async()=>{
+    const e=envios.find(x=>x.id===editingId); if(!e) return;
+    if(!confirm('¿Eliminar el envío con guía '+e.guia+'? Esta acción no se puede deshacer.')) return;
+    try{ await deleteRecord(e.id); dlg.close(); toast('Envío eliminado'); }
+    catch(err){ $('#err').textContent='No se pudo eliminar. Inténtalo de nuevo.'; }
+  };
+  $('#addBtn').onclick=()=>openDlg(null);
+  $('#q').addEventListener('input',ev=>{query=ev.target.value; render();});
+  document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{
+    filter=b.dataset.f; document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b)); render();
+  }));
+
+  // ---------- estado de guardado y respaldo ----------
+  function setSync(kind, txt){ const el=$('#sync'); el.className='sync '+kind; $('#syncTxt').textContent=txt; }
+  let dl=null;
+  const ready=()=>{ $('#impBtn').hidden=false; if(dl || !window.claude){ $('#csvBtn').hidden=false; $('#jsonBtn').hidden=false; } };
+  if(window.claude && typeof window.claude.use==='function'){
+    window.claude.use('downloads').then(d=>{ dl=d; if(loaded) ready(); }).catch(()=>{});
+  }
+  async function saveFile(filename, text, mime){
+    if(!dl){
+      if(!window.claude){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:mime})); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); return; }
+      toast('Las descargas no están disponibles aquí.'); return;
+    }
+    try{ await dl.save({filename, data:new Blob([text],{type:mime})}); }
+    catch(e){ if(e&&e.code!=='declined') toast('No se pudo descargar el archivo.'); }
+  }
+  const stamp=()=>today();
+  $('#csvBtn').onclick=()=>{
+    const esc=v=>{ const t=String(v??''); return /[";\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+    const head=['Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
+    const lines=[head.join(';')].concat(envios.map(e=>[e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',e.pago==='pagado'?'Pagado':'Pendiente',(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
+    saveFile('envios-'+stamp()+'.csv','\ufeff'+lines.join('\r\n'),'text/csv');
+  };
+  $('#jsonBtn').onclick=()=>saveFile('respaldo-envios-'+stamp()+'.json',JSON.stringify({app:'control-envios',version:1,envios},null,2),'application/json');
+  $('#impBtn').onclick=()=>$('#impFile').click();
+  $('#impFile').addEventListener('change',async ev=>{
+    const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
+    let data; try{ data=JSON.parse(await f.text()); }catch(e){ toast('El archivo no es un respaldo válido.'); return; }
+    const list=Array.isArray(data)?data:data.envios;
+    if(!Array.isArray(list)){ toast('El archivo no es un respaldo válido.'); return; }
+    const nuevos=list.filter(r=>r&&r.guia&&!envios.some(e=>e.guia.toLowerCase()===String(r.guia).toLowerCase()));
+    if(!nuevos.length){ toast('Todos los envíos del respaldo ya están en la lista.'); return; }
+    if(!confirm('Se agregarán '+nuevos.length+' envíos del respaldo. Los que ya existen no se tocan. ¿Continuar?')) return;
+    const CAMPOS=['guia','producto','transportadora','destino','fechaEnvio','fechaEntrega','valor','costo','pago','fechaPago','devolucion','notas','creado','actualizado'];
+    const NUM=['valor','costo','creado','actualizado'];
+    let ok=0; const fallos=[];
+    for(const r of nuevos){
+      const rec={ id:(typeof r.id==='string' && /^[A-Za-z0-9_-]{1,100}$/.test(r.id)) ? r.id : newId() };
+      CAMPOS.forEach(k=>{
+        const v=r[k];
+        if(v===undefined || v===null || v==='') return;
+        rec[k] = NUM.includes(k) ? (Number(String(v).replace(/[^\d.-]/g,''))||null) : String(v);
+      });
+      if(!rec.pago) rec.pago='pendiente';
+      try{ await saveRecord(rec); ok++; }
+      catch(e){ fallos.push('Guía '+rec.guia+': '+(e && (e.code||e.message) || 'error desconocido')); }
+    }
+    toast(ok===1?'1 envío restaurado':ok+' envíos restaurados');
+    if(fallos.length) alert('No se pudieron restaurar '+fallos.length+' envíos:\n\n'+fallos.join('\n'));
+  });
+
+  // ---------- arranque (Firebase) ----------
+  // Pega aquí la configuración de tu proyecto de Firebase
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDtrZMExAKSATwPWU_GWt7t7amV4v89qZk",
+    authDomain: "control-envios-cb576.firebaseapp.com",
+    projectId: "control-envios-cb576",
+    storageBucket: "control-envios-cb576.firebasestorage.app",
+    messagingSenderId: "231988900613",
+    appId: "1:231988900613:web:fb65a7a3f2316c3c597d6c"
+  };
+
+  render();
+  const loginEl=$('#login'), appEl=document.querySelector('.wrap');
+  if(FIREBASE_CONFIG.apiKey==='PEGA_AQUI'){
+    loaded=true; render(); setSync('off','Falta pegar la configuración de Firebase en el archivo.');
+  } else if(typeof firebase==='undefined'){
+    loaded=true; render(); setSync('off','No se pudo cargar Firebase. Revisa tu conexión y recarga.');
+  } else {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const auth=firebase.auth(), fs=firebase.firestore();
+    let unsub=null;
+    $('#loginBtn').onclick=()=>{
+      $('#loginErr').textContent='';
+      auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+        .catch(err=>{ $('#loginErr').textContent='No se pudo iniciar sesión ('+(err.code||err.message)+').'; });
+    };
+    $('#logoutBtn').onclick=()=>auth.signOut();
+    auth.onAuthStateChanged(user=>{
+      if(unsub){ unsub(); unsub=null; }
+      if(!user){ col=null; envios=[]; loaded=false; appEl.hidden=true; loginEl.hidden=false; return; }
+      loginEl.hidden=true; appEl.hidden=false;
+      $('#who').textContent=user.email; $('#logoutBtn').hidden=false;
+      setSync('','Conectando…');
+      col=fs.collection('envios');
+      unsub=col.onSnapshot({includeMetadataChanges:true}, snap=>{
+        envios=snap.docs.map(d=>({id:d.id,...d.data()}));
+        loaded=true; render(); ready();
+        if(snap.metadata.hasPendingWrites) setSync('local','Guardando en la nube…');
+        else if(snap.metadata.fromCache) setSync('local','Conectando con la nube… lo que ves aún no está confirmado.');
+        else setSync('cloud','Guardado en la nube. Se ve igual en todos tus equipos.');
+      }, err=>{
+        loaded=true; render();
+        if(err.code==='permission-denied') setSync('off','El correo '+user.email+' no tiene permiso. Revisa las reglas de Firestore.');
+        else setSync('off','Sin conexión con la nube ('+err.code+'). Recarga la página.');
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>

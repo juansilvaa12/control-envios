@@ -148,6 +148,7 @@ textarea{resize:vertical;min-height:60px}
   <header class="head">
     <h1>Envíos y pagos</h1>
     <div class="summary" aria-live="polite">
+      <div class="sum pend"><b id="sPend">$0</b><span id="sPendN">0 envíos por cobrar</span></div>
       <div class="sum"><b id="sCob">$0</b><span>cobrado en total</span></div>
       <div class="sum gain"><b id="sGan">$0</b><span>ganancia cobrada</span></div>
     </div>
@@ -167,6 +168,7 @@ textarea{resize:vertical;min-height:60px}
   <div id="secciones"></div>
   <div class="sheet empty" id="empty" hidden></div>
   <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente, pagado y devuelto.</p>
+  <p class="note" style="margin-top:4px">Versión 2.5</p>
   <div class="syncbar">
     <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
     <div class="syncbtns">
@@ -270,13 +272,13 @@ textarea{resize:vertical;min-height:60px}
   const esDevuelto = e => estado(e)==='devuelto' || !!e.devolucion;
 
   function balance(lista){
-    let cob=0, gan=0, pend=0, pag=0, dev=0;
+    let cob=0, gan=0, pend=0, pag=0, dev=0, porCobrar=0;
     lista.forEach(e=>{
       if(esDevuelto(e)){ dev++; return; }
       if(cuenta(e)){ pag++; cob+=e.valor||0; const g=profit(e); if(g!==null) gan+=g; }
-      else pend++;
+      else { pend++; porCobrar+=e.valor||0; }
     });
-    return {cob,gan,pend,pag,dev};
+    return {cob,gan,pend,pag,dev,porCobrar};
   }
   const plural=(n,a,b)=>n+' '+(n===1?a:b);
 
@@ -318,6 +320,8 @@ textarea{resize:vertical;min-height:60px}
 
   function render(){
     const total=balance(envios);
+    $('#sPend').textContent = money.format(total.porCobrar);
+    $('#sPendN').textContent = total.pend===1 ? '1 envío por cobrar' : total.pend+' envíos por cobrar';
     $('#sCob').textContent = money.format(total.cob);
     $('#sGan').textContent = money.format(total.gan);
 

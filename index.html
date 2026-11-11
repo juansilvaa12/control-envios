@@ -373,7 +373,7 @@ textarea{resize:vertical;min-height:60px}
   form.addEventListener('submit', async ev=>{
     ev.preventDefault();
     const guia= tipoState==='local' ? '' : form.guia.value.trim(), destino=form.destino.value.trim(), fe=form.fechaEnvio.value, fen=form.fechaEntrega.value;
-    if(!guia){ $('#err').textContent='Escribe el número de guía.'; form.guia.focus(); return; }
+    if(!guia && tipoState!=='local'){ $('#err').textContent='Escribe el número de guía.'; form.guia.focus(); return; }
     if(!destino){ $('#err').textContent='Escribe el destino.'; form.destino.focus(); return; }
     if(!fe){ $('#err').textContent='Elige la fecha de envío.'; form.fechaEnvio.focus(); return; }
     if(fen && fen<fe){ $('#err').textContent='La fecha de entrega no puede ser anterior a la de envío.'; form.fechaEntrega.focus(); return; }

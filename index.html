@@ -71,6 +71,8 @@ tbody tr:hover{background:color-mix(in srgb,var(--paper) 60%,transparent)}
 .stamp{display:inline-block;font:700 1rem/1 "Barlow Condensed","Arial Narrow",sans-serif;padding:6px 10px;border:2px solid currentColor;border-radius:4px;transform:rotate(-3deg);background:none;cursor:pointer;white-space:nowrap}
 .stamp.pend{color:var(--pend);background:var(--pend-bg)}
 .stamp.paid{color:var(--paid);background:var(--paid-bg);transform:rotate(2deg)}
+.stamp.ent{color:var(--transit);background:color-mix(in srgb,var(--tape) 18%,transparent);transform:rotate(1deg)}
+.paytoggle button.on.e{border-color:var(--transit);color:var(--transit);background:color-mix(in srgb,var(--tape) 18%,transparent)}
 .stamp.dev{color:var(--muted);background:var(--paper);transform:rotate(-1deg)}
 .paytoggle button.on.v{border-color:var(--muted);color:var(--ink);background:var(--paper)}
 .seccion{margin-top:28px}
@@ -168,7 +170,7 @@ textarea{resize:vertical;min-height:60px}
   <div id="secciones"></div>
   <div class="sheet empty" id="empty" hidden></div>
   <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente, pagado y devuelto.</p>
-  <p class="note" style="margin-top:4px">Versión 2.5</p>
+  <p class="note" style="margin-top:4px">Versión 3.0</p>
   <div class="syncbar">
     <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
     <div class="syncbtns">
@@ -203,7 +205,8 @@ textarea{resize:vertical;min-height:60px}
       <p class="full calc muted" id="calc"></p>
       <div class="full"><label as="span">Pago</label>
         <div class="paytoggle" role="group" aria-label="Estado de pago">
-          <button type="button" class="p" data-pay="pendiente">Pendiente de pago</button>
+          <button type="button" class="p" data-pay="pendiente">Pendiente</button>
+          <button type="button" class="e" data-pay="entregado" id="btnEntregado">Entregado</button>
           <button type="button" class="d" data-pay="pagado">Pagado</button>
           <button type="button" class="v" data-pay="devuelto">Devuelto</button>
         </div>
@@ -266,19 +269,19 @@ textarea{resize:vertical;min-height:60px}
   const newId = () => 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
   // ---------- render ----------
-  const ESTADOS={ pendiente:{txt:'Pendiente',cls:'pend'}, pagado:{txt:'Pagado',cls:'paid'}, devuelto:{txt:'Devuelto',cls:'dev'} };
+  const ESTADOS={ pendiente:{txt:'Pendiente',cls:'pend'}, entregado:{txt:'Entregado',cls:'ent'}, pagado:{txt:'Pagado',cls:'paid'}, devuelto:{txt:'Devuelto',cls:'dev'} };
   const estado = e => ESTADOS[e.pago] ? e.pago : 'pendiente';
   const cuenta = e => estado(e)==='pagado' && !e.devolucion;   // solo lo pagado suma al balance
   const esDevuelto = e => estado(e)==='devuelto' || !!e.devolucion;
 
   function balance(lista){
-    let cob=0, gan=0, pend=0, pag=0, dev=0, porCobrar=0;
+    let cob=0, gan=0, pend=0, ent=0, pag=0, dev=0, porCobrar=0;
     lista.forEach(e=>{
       if(esDevuelto(e)){ dev++; return; }
       if(cuenta(e)){ pag++; cob+=e.valor||0; const g=profit(e); if(g!==null) gan+=g; }
-      else { pend++; porCobrar+=e.valor||0; }
+      else { if(estado(e)==='entregado') ent++; pend++; porCobrar+=e.valor||0; }
     });
-    return {cob,gan,pend,pag,dev,porCobrar};
+    return {cob,gan,pend,ent,pag,dev,porCobrar};
   }
   const plural=(n,a,b)=>n+' '+(n===1?a:b);
 
@@ -327,7 +330,7 @@ textarea{resize:vertical;min-height:60px}
 
     const q = query.trim().toLowerCase();
     const list = envios
-      .filter(e => filter==='all' || (filter==='dev' ? esDevuelto(e) : filter==='paid' ? cuenta(e) : (estado(e)==='pendiente' && !e.devolucion)))
+      .filter(e => filter==='all' || (filter==='dev' ? esDevuelto(e) : filter==='paid' ? cuenta(e) : ((estado(e)==='pendiente' || estado(e)==='entregado') && !e.devolucion)))
       .filter(e => !q || [e.guia,e.producto,e.destino,e.transportadora,e.notas].some(x=>String(x||'').toLowerCase().includes(q)))
       .sort((a,b)=> (b.fechaEnvio||'').localeCompare(a.fechaEnvio||'') || (b.creado||0)-(a.creado||0));
 
@@ -356,7 +359,9 @@ textarea{resize:vertical;min-height:60px}
       el.querySelector('th').textContent=sec.col;
       el.querySelector('.b-cob').textContent=money.format(b.cob);
       el.querySelector('.b-gan').textContent=money.format(b.gan);
-      el.querySelector('.b-cnt').textContent=[plural(b.pend,'pendiente','pendientes'),plural(b.pag,'pagado','pagados'),plural(b.dev,'devuelto','devueltos')].join(' · ');
+      el.querySelector('.b-cnt').textContent=(sec.titulo==='Transportadora'
+        ? [plural(b.pend-b.ent,'pendiente','pendientes'),plural(b.ent,'entregado','entregados')]
+        : [plural(b.pend,'pendiente','pendientes')]).concat([plural(b.pag,'pagado','pagados'),plural(b.dev,'devuelto','devueltos')]).join(' · ');
       const tb=el.querySelector('tbody');
       filas.forEach(e=>tb.appendChild(filaEnvio(e)));
       if(!filas.length){
@@ -371,8 +376,11 @@ textarea{resize:vertical;min-height:60px}
 
   async function togglePay(id){
     const e=envios.find(x=>x.id===id); if(!e) return;
-    const sig={pendiente:'pagado', pagado:'devuelto', devuelto:'pendiente'}[estado(e)];
+    const sig = esLocal(e)
+      ? {pendiente:'pagado', entregado:'pagado', pagado:'devuelto', devuelto:'pendiente'}[estado(e)]
+      : {pendiente:'entregado', entregado:'pagado', pagado:'devuelto', devuelto:'pendiente'}[estado(e)];
     const rec={...e, pago: sig, actualizado:Date.now()};
+    if(sig==='entregado' && !rec.fechaEntrega) rec.fechaEntrega=today();
     if(sig==='pagado') rec.fechaPago=today(); else delete rec.fechaPago;
     try{ await saveRecord(rec); toast(nombre(e)+' marcado como '+ESTADOS[sig].txt.toLowerCase()); }
     catch(err){ toast('No se pudo guardar el cambio. Revisa tu conexión.'); }
@@ -396,6 +404,8 @@ textarea{resize:vertical;min-height:60px}
     form.querySelectorAll('[data-tipo]').forEach(b=>{ const on=b.dataset.tipo===v; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
     $('#lblGuia').hidden = v==='local';
     $('#lblTrans').textContent = v==='local' ? 'Mensajero' : 'Transportadora';
+    $('#btnEntregado').hidden = v==='local';
+    if(v==='local' && payState==='entregado') setPay('pendiente');
   }
   form.querySelectorAll('[data-tipo]').forEach(b=>b.addEventListener('click',()=>setTipo(b.dataset.tipo)));
 
@@ -434,6 +444,7 @@ textarea{resize:vertical;min-height:60px}
       pago: payState, creado: prev?.creado||Date.now(), actualizado: Date.now()
     };
     if(payState==='pagado') rec.fechaPago = prev?.fechaPago || today();
+    if(payState==='entregado' && !rec.fechaEntrega) rec.fechaEntrega = today();
     $('#saveBtn').disabled=true;
     try{ await saveRecord(rec); dlg.close(); toast(prev?'Envío actualizado':'Envío guardado'); }
     catch(err){ $('#err').textContent='No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.'; }

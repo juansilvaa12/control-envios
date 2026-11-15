@@ -183,7 +183,7 @@ textarea{resize:vertical;min-height:60px}
   <div id="secciones"></div>
   <div class="sheet empty" id="empty" hidden></div>
   <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente, pagado y devuelto.</p>
-  <p class="note" style="margin-top:4px">Versión 4.1</p>
+  <p class="note" style="margin-top:4px">Versión 4.2</p>
   <div class="syncbar">
     <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
     <div class="syncbtns">
@@ -331,7 +331,7 @@ textarea{resize:vertical;min-height:60px}
       const tn=(e.transportadora||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
       if(e.guia && (!tn || tn.includes('inter'))){
         const a=document.createElement('a'); a.className='guia-link'; a.textContent=e.guia;
-        a.href='https://interrapidisimo.com/sigue-tu-envio/'; a.target='_blank'; a.rel='noopener';
+        a.href='https://siguetuenvio.interrapidisimo.com/'; a.target='_blank'; a.rel='noopener';
         a.title='Rastrear en Inter Rapidísimo';
         a.addEventListener('click',ev=>{ ev.stopPropagation();
           try{ navigator.clipboard.writeText(e.guia).then(()=>toast('Guía '+e.guia+' copiada. Pégala en Inter Rapidísimo.'),()=>{}); }catch(_){}

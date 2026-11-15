@@ -36,6 +36,12 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.5 "Barlow
 h1{font:700 clamp(2.2rem,6vw,3.4rem)/1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0;letter-spacing:-.01em}
 .head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px;padding-bottom:20px;border-bottom:3px solid var(--ink)}
 .summary{display:flex;gap:28px;flex-wrap:wrap}
+.semana{display:flex;align-items:center;gap:8px;margin:18px 0 0;flex-wrap:wrap}
+.semana b{font:600 1.15rem "Barlow Condensed","Arial Narrow",sans-serif;min-width:190px;text-align:center}
+.semana button{border:1px solid var(--line);background:var(--sheet);color:var(--ink);border-radius:6px;padding:6px 12px;font:600 1rem "Barlow",sans-serif;cursor:pointer}
+.semana button:disabled{opacity:.35;cursor:default}
+a.guia-link{color:inherit;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+a.guia-link:hover{color:var(--transit)}
 .sum b{display:block;font:600 1.7rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
 .sum span{font-size:.9rem;color:var(--muted)}
 .sum.pend b{color:var(--pend)}
@@ -99,6 +105,7 @@ tbody tr:hover{background:color-mix(in srgb,var(--paper) 60%,transparent)}
   td.c-val::before{content:"Venta: ";color:var(--muted)}
   td.c-cost::before{content:"Costo: ";color:var(--muted)}
   td.c-gan::before{content:"Ganancia: ";color:var(--muted)}
+  td.c-cost .sub{display:inline;margin-left:6px}
   td.c-ent.is-ret::before{content:none}
   td.c-env::before{content:"Enviado: ";color:var(--muted)}
   td.c-ent::before{content:"Entregado: ";color:var(--muted)}
@@ -151,10 +158,16 @@ textarea{resize:vertical;min-height:60px}
     <h1>Envíos y pagos</h1>
     <div class="summary" aria-live="polite">
       <div class="sum pend"><b id="sPend">$0</b><span id="sPendN">0 envíos por cobrar</span></div>
-      <div class="sum"><b id="sCob">$0</b><span>cobrado en total</span></div>
-      <div class="sum gain"><b id="sGan">$0</b><span>ganancia cobrada</span></div>
+      <div class="sum"><b id="sCob">$0</b><span>cobrado esta semana</span></div>
+      <div class="sum gain"><b id="sGan">$0</b><span>ganancia de la semana</span></div>
     </div>
   </header>
+  <div class="semana" role="group" aria-label="Semana">
+    <button type="button" id="semAnt" aria-label="Semana anterior">‹</button>
+    <b id="semTxt"></b>
+    <button type="button" id="semSig" aria-label="Semana siguiente">›</button>
+    <button type="button" id="semHoy" hidden>Esta semana</button>
+  </div>
 
   <div class="toolbar">
     <input class="search" id="q" type="search" placeholder="Buscar guía, producto, destino o transportadora" aria-label="Buscar">
@@ -170,7 +183,7 @@ textarea{resize:vertical;min-height:60px}
   <div id="secciones"></div>
   <div class="sheet empty" id="empty" hidden></div>
   <p class="note" id="note">Toca un envío para editarlo. Toca el sello para cambiar entre pendiente, pagado y devuelto.</p>
-  <p class="note" style="margin-top:4px">Versión 3.0</p>
+  <p class="note" style="margin-top:4px">Versión 4.1</p>
   <div class="syncbar">
     <span class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Conectando…</span></span>
     <div class="syncbtns">
@@ -202,6 +215,7 @@ textarea{resize:vertical;min-height:60px}
       <label>Fecha de entrega<input name="fechaEntrega" type="date"></label>
       <label>Precio de venta<input name="valor" inputmode="numeric" placeholder="Lo que cobras" autocomplete="off"></label>
       <label>Costo del producto<input name="costo" inputmode="numeric" placeholder="Lo que te costó" autocomplete="off"></label>
+      <label class="full" id="lblFlete" hidden>Valor del domicilio<input name="flete" inputmode="numeric" placeholder="Lo que le pagas al mensajero" autocomplete="off"></label>
       <p class="full calc muted" id="calc"></p>
       <div class="full"><label as="span">Pago</label>
         <div class="paytoggle" role="group" aria-label="Estado de pago">
@@ -244,7 +258,8 @@ textarea{resize:vertical;min-height:60px}
   const parseVal = v => { const n = Number(String(v||'').replace(/[^\d]/g,'')); return n>0?n:null; };
   const esLocal = e => e.tipo==='local';
   const nombre = e => esLocal(e) ? 'Envío local a '+e.destino : 'Guía '+e.guia;
-  const profit = e => (e.valor!=null && e.costo!=null) ? e.valor - e.costo : null;
+  const fleteDe = e => (e.tipo==='local' && e.flete) ? e.flete : 0;
+  const profit = e => (e.valor!=null && e.costo!=null) ? e.valor - e.costo - fleteDe(e) : null;
   const today = () => { const t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); };
 
   function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -274,14 +289,26 @@ textarea{resize:vertical;min-height:60px}
   const cuenta = e => estado(e)==='pagado' && !e.devolucion;   // solo lo pagado suma al balance
   const esDevuelto = e => estado(e)==='devuelto' || !!e.devolucion;
 
-  function balance(lista){
-    let cob=0, gan=0, pend=0, ent=0, pag=0, dev=0, porCobrar=0;
+  let semOffset=0;
+  const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  function rangoSemana(off){
+    const t=new Date(); t.setHours(0,0,0,0);
+    const lunes=new Date(t); lunes.setDate(t.getDate()-((t.getDay()+6)%7)+off*7);
+    const dom=new Date(lunes); dom.setDate(lunes.getDate()+6);
+    return {ini:iso(lunes), fin:iso(dom), lunes, dom};
+  }
+  const fechaCobro = e => e.fechaPago || e.fechaEntrega || e.fechaEnvio || '';
+  function balance(lista, sem){
+    let cob=0, gan=0, pend=0, ent=0, pag=0, dev=0, porCobrar=0, dom=0;
     lista.forEach(e=>{
       if(esDevuelto(e)){ dev++; return; }
-      if(cuenta(e)){ pag++; cob+=e.valor||0; const g=profit(e); if(g!==null) gan+=g; }
+      if(cuenta(e)){ pag++;
+        const f=fechaCobro(e);
+        if(!sem || (f>=sem.ini && f<=sem.fin)){ dom+=fleteDe(e); cob+=e.valor||0; const g=profit(e); if(g!==null) gan+=g; }
+      }
       else { if(estado(e)==='entregado') ent++; pend++; porCobrar+=e.valor||0; }
     });
-    return {cob,gan,pend,ent,pag,dev,porCobrar};
+    return {cob,gan,pend,ent,pag,dev,porCobrar,dom};
   }
   const plural=(n,a,b)=>n+' '+(n===1?a:b);
 
@@ -299,7 +326,19 @@ textarea{resize:vertical;min-height:60px}
       '<td class="c-gan num"></td>'+
       '<td class="c-estado"><button class="stamp '+est.cls+'" type="button"></button></td>';
     if(esLocal(e)){ tr.querySelector('.guia').textContent = e.transportadora || 'Sin mensajero'; }
-    else { tr.querySelector('.guia').textContent = e.guia; tr.querySelector('.sub').textContent = e.transportadora||''; }
+    else {
+      tr.querySelector('.sub').textContent = e.transportadora||'';
+      const tn=(e.transportadora||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if(e.guia && (!tn || tn.includes('inter'))){
+        const a=document.createElement('a'); a.className='guia-link'; a.textContent=e.guia;
+        a.href='https://interrapidisimo.com/sigue-tu-envio/'; a.target='_blank'; a.rel='noopener';
+        a.title='Rastrear en Inter Rapidísimo';
+        a.addEventListener('click',ev=>{ ev.stopPropagation();
+          try{ navigator.clipboard.writeText(e.guia).then(()=>toast('Guía '+e.guia+' copiada. Pégala en Inter Rapidísimo.'),()=>{}); }catch(_){}
+        });
+        tr.querySelector('.guia').appendChild(a);
+      } else tr.querySelector('.guia').textContent = e.guia;
+    }
     tr.querySelector('.c-dest').textContent=e.destino;
     tr.querySelector('.c-env').textContent=fmtDate(e.fechaEnvio);
     const ent=tr.querySelector('.c-ent');
@@ -310,6 +349,7 @@ textarea{resize:vertical;min-height:60px}
     tr.querySelector('.c-val').textContent = e.valor? money.format(e.valor):'';
     tr.querySelector('.c-prod').textContent = e.producto||'';
     tr.querySelector('.c-cost').textContent = e.costo? money.format(e.costo):'';
+    if(fleteDe(e)){ const sd=document.createElement('span'); sd.className='sub'; sd.textContent='+ domicilio '+money.format(e.flete); tr.querySelector('.c-cost').appendChild(sd); }
     const g=esDevuelto(e)?null:profit(e), gc=tr.querySelector('.c-gan');
     if(g!==null){ const sp=document.createElement('span'); sp.className='gan'+(g<0?' neg':''); sp.textContent=money.format(g); gc.appendChild(sp); }
     const st=tr.querySelector('.stamp');
@@ -322,7 +362,14 @@ textarea{resize:vertical;min-height:60px}
   }
 
   function render(){
-    const total=balance(envios);
+    const sem=rangoSemana(semOffset);
+    const fd=d=>d.toLocaleDateString('es-CO',{day:'numeric',month:'short'});
+    $('#semTxt').textContent=(semOffset===0?'Esta semana: ':semOffset===-1?'Semana pasada: ':'')+fd(sem.lunes)+' – '+fd(sem.dom);
+    $('#semSig').disabled = semOffset>=0;
+    $('#semHoy').hidden = semOffset===0;
+    document.querySelector('#sCob+span').textContent = semOffset===0?'cobrado esta semana':'cobrado en la semana';
+    document.querySelector('#sGan+span').textContent = 'ganancia de la semana';
+    const total=balance(envios, sem);
     $('#sPend').textContent = money.format(total.porCobrar);
     $('#sPendN').textContent = total.pend===1 ? '1 envío por cobrar' : total.pend+' envíos por cobrar';
     $('#sCob').textContent = money.format(total.cob);
@@ -346,11 +393,12 @@ textarea{resize:vertical;min-height:60px}
 
     [ {titulo:'Transportadora', col:'Guía', es:e=>!esLocal(e)},
       {titulo:'Mensajería local', col:'Mensajero', es:esLocal} ].forEach(sec=>{
-      const todos=envios.filter(sec.es), filas=list.filter(sec.es), b=balance(todos);
+      const todos=envios.filter(sec.es), filas=list.filter(sec.es), b=balance(todos, sem);
       const el=document.createElement('section'); el.className='seccion';
       el.innerHTML =
         '<div class="sec-head"><h2></h2><div class="sec-bal">'+
           '<span>Cobrado <b class="b-cob"></b></span>'+
+          '<span class="b-dom" hidden>Domicilios <b></b></span>'+
           '<span class="g">Ganancia <b class="b-gan"></b></span>'+
           '<span class="b-cnt"></span>'+
         '</div></div>'+
@@ -359,6 +407,7 @@ textarea{resize:vertical;min-height:60px}
       el.querySelector('th').textContent=sec.col;
       el.querySelector('.b-cob').textContent=money.format(b.cob);
       el.querySelector('.b-gan').textContent=money.format(b.gan);
+      if(sec.col==='Mensajero'){ el.querySelector('.b-dom').hidden=false; el.querySelector('.b-dom b').textContent=money.format(b.dom); el.querySelectorAll('th')[6].textContent='Costo / domicilio'; }
       el.querySelector('.b-cnt').textContent=(sec.titulo==='Transportadora'
         ? [plural(b.pend-b.ent,'pendiente','pendientes'),plural(b.ent,'entregado','entregados')]
         : [plural(b.pend,'pendiente','pendientes')]).concat([plural(b.pag,'pagado','pagados'),plural(b.dev,'devuelto','devueltos')]).join(' · ');
@@ -391,11 +440,12 @@ textarea{resize:vertical;min-height:60px}
   form.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>setPay(b.dataset.pay)));
 
   function updateCalc(){
-    const v=parseVal(form.valor.value), c=parseVal(form.costo.value), el=$('#calc');
-    if(v!=null && c!=null){ const g=v-c; el.textContent='Ganancia de este envío: '+money.format(g)+' ('+Math.round(g/v*100)+'% de la venta)'; el.className='full calc'+(g<0?' neg':''); }
+    const v=parseVal(form.valor.value), c=parseVal(form.costo.value), fl=tipoState==='local'?(parseVal(form.flete.value)||0):0, el=$('#calc');
+    if(v!=null && c!=null){ const g=v-c-fl; el.textContent=(fl?money.format(v)+' − '+money.format(c)+' − domicilio '+money.format(fl)+' = ':'')+'Ganancia de este envío: '+money.format(g)+' ('+Math.round(g/v*100)+'% de la venta)'; el.className='full calc'+(g<0?' neg':''); }
     else { el.textContent='Escribe el precio de venta y el costo para ver la ganancia.'; el.className='full calc muted'; }
   }
   form.valor.addEventListener('input',updateCalc);
+  form.flete.addEventListener('input',updateCalc);
   form.costo.addEventListener('input',updateCalc);
 
   let tipoState='transportadora';
@@ -403,6 +453,8 @@ textarea{resize:vertical;min-height:60px}
     tipoState=v;
     form.querySelectorAll('[data-tipo]').forEach(b=>{ const on=b.dataset.tipo===v; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on); });
     $('#lblGuia').hidden = v==='local';
+    $('#lblFlete').hidden = v!=='local';
+    if(typeof updateCalc==='function') updateCalc();
     $('#lblTrans').textContent = v==='local' ? 'Mensajero' : 'Transportadora';
     $('#btnEntregado').hidden = v==='local';
     if(v==='local' && payState==='entregado') setPay('pendiente');
@@ -418,7 +470,7 @@ textarea{resize:vertical;min-height:60px}
       form.guia.value=e.guia||''; form.transportadora.value=e.transportadora||''; form.destino.value=e.destino||'';
       form.fechaEnvio.value=e.fechaEnvio||''; form.fechaEntrega.value=e.fechaEntrega||'';
       form.valor.value=e.valor?String(e.valor):''; form.notas.value=e.notas||''; setPay(e.pago||'pendiente');
-      form.producto.value=e.producto||''; form.costo.value=e.costo?String(e.costo):'';
+      form.producto.value=e.producto||''; form.costo.value=e.costo?String(e.costo):''; form.flete.value=e.flete?String(e.flete):'';
       form.devolucion.value=e.devolucion||''; setTipo(e.tipo||'transportadora');
     } else { form.fechaEnvio.value=today(); setPay('pendiente'); setTipo('transportadora'); }
     updateCalc(); dlg.showModal(); setTimeout(()=>(tipoState==='local'?form.destino:form.guia).focus(),30);
@@ -439,7 +491,7 @@ textarea{resize:vertical;min-height:60px}
       transportadora: form.transportadora.value.trim(),
       fechaEnvio: fe, fechaEntrega: fen||'',
       valor: parseVal(form.valor.value), notas: form.notas.value.trim(),
-      producto: form.producto.value.trim(), costo: parseVal(form.costo.value),
+      producto: form.producto.value.trim(), costo: parseVal(form.costo.value), flete: tipoState==='local' ? parseVal(form.flete.value) : null,
       devolucion: form.devolucion.value,
       pago: payState, creado: prev?.creado||Date.now(), actualizado: Date.now()
     };
@@ -459,6 +511,9 @@ textarea{resize:vertical;min-height:60px}
     catch(err){ $('#err').textContent='No se pudo eliminar. Inténtalo de nuevo.'; }
   };
   $('#addBtn').onclick=()=>openDlg(null);
+  $('#semAnt').onclick=()=>{ semOffset--; render(); };
+  $('#semSig').onclick=()=>{ if(semOffset<0){ semOffset++; render(); } };
+  $('#semHoy').onclick=()=>{ semOffset=0; render(); };
   $('#q').addEventListener('input',ev=>{query=ev.target.value; render();});
   document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{
     filter=b.dataset.f; document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b)); render();
@@ -482,8 +537,8 @@ textarea{resize:vertical;min-height:60px}
   const stamp=()=>today();
   $('#csvBtn').onclick=()=>{
     const esc=v=>{ const t=String(v??''); return /[";\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
-    const head=['Tipo','Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
-    const lines=[head.join(';')].concat(envios.map(e=>[esLocal(e)?'Mensajería local':'Transportadora',e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',profit(e)??'',ESTADOS[estado(e)].txt,(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
+    const head=['Tipo','Número de guía','Producto','Transportadora','Destino','Fecha de envío','Fecha de entrega','Precio de venta','Costo','Domicilio','Ganancia','Pago','Devolución','Fecha de pago','Notas'];
+    const lines=[head.join(';')].concat(envios.map(e=>[esLocal(e)?'Mensajería local':'Transportadora',e.guia,e.producto,e.transportadora,e.destino,e.fechaEnvio,e.fechaEntrega||'En tránsito',e.valor||'',e.costo||'',fleteDe(e)||'',profit(e)??'',ESTADOS[estado(e)].txt,(e.devolucion==='medellin'?'Llegó a Medellín':e.devolucion==='pendiente'?'Pendiente de devolución':''),e.fechaPago||'',e.notas].map(esc).join(';')));
     saveFile('envios-'+stamp()+'.csv','\ufeff'+lines.join('\r\n'),'text/csv');
   };
   $('#jsonBtn').onclick=()=>saveFile('respaldo-envios-'+stamp()+'.json',JSON.stringify({app:'control-envios',version:1,envios},null,2),'application/json');
@@ -496,8 +551,8 @@ textarea{resize:vertical;min-height:60px}
     const nuevos=list.filter(r=>r && (r.guia || r.tipo==='local') && !envios.some(e=>e.id===r.id || (r.guia && (e.guia||'').toLowerCase()===String(r.guia).toLowerCase())));
     if(!nuevos.length){ toast('Todos los envíos del respaldo ya están en la lista.'); return; }
     if(!confirm('Se agregarán '+nuevos.length+' envíos del respaldo. Los que ya existen no se tocan. ¿Continuar?')) return;
-    const CAMPOS=['tipo','guia','producto','transportadora','destino','fechaEnvio','fechaEntrega','valor','costo','pago','fechaPago','devolucion','notas','creado','actualizado'];
-    const NUM=['valor','costo','creado','actualizado'];
+    const CAMPOS=['tipo','guia','producto','transportadora','destino','fechaEnvio','fechaEntrega','valor','costo','flete','pago','fechaPago','devolucion','notas','creado','actualizado'];
+    const NUM=['valor','costo','flete','creado','actualizado'];
     let ok=0; const fallos=[];
     for(const r of nuevos){
       const rec={ id:(typeof r.id==='string' && /^[A-Za-z0-9_-]{1,100}$/.test(r.id)) ? r.id : newId() };
